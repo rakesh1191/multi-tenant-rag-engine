@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-engine-api
+  namespace: rag-engine
+  labels:
+    app: rag-engine-api
+    app.kubernetes.io/part-of: rag-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-engine-api
+  template:
+    metadata:
+      labels:
+        app: rag-engine-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: rag-engine-api
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: api
+          image: rag-engine-api:latest  # overridden by cloud overlay
+          ports:
+            - containerPort: 8000
+              name: http
+
+          envFrom:
+            - secretRef:
+                name: rag-engine-secrets
+            - configMapRef:
+                name: rag-engine-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: rag-engine-api

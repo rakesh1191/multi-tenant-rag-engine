@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rag-engine-api
+  namespace: rag-engine
+  labels:
+    app: rag-engine-api
+spec:
+  selector:
+    matchLabels:
+      app: rag-engine-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

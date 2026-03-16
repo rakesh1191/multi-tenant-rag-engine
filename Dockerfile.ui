@@ -1,0 +1,49 @@
+# --------------------------------------------------------------------------
+# Stage 1: deps — install node_modules
+# --------------------------------------------------------------------------
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci --omit=dev
+
+# --------------------------------------------------------------------------
+# Stage 2: builder — build Next.js standalone output
+# --------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY ui/ .
+
+# Standalone output bundles only the required server files
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# --------------------------------------------------------------------------
+# Stage 3: runtime — minimal image with standalone output
+# --------------------------------------------------------------------------
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
+
+# Copy standalone server + static assets
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -qO- http://localhost:3000/ || exit 1

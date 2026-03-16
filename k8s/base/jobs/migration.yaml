@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: rag-engine
+  labels:
+    app: db-migrate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: rag-engine-api
+
+      containers:
+        - name: migrate
+          image: rag-engine-api:latest  # overridden by cloud overlay
+          command: ["alembic", "upgrade", "head"]
+
+          envFrom:
+            - secretRef:
+                name: rag-engine-secrets
+            - configMapRef:
+                name: rag-engine-config
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

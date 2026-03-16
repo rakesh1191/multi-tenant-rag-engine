@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ingress.yaml
+
+images:
+  - name: rag-engine-api
+    newName: "123456789012.dkr.ecr.us-east-1.amazonaws.com/rag-prod-api"
+    newTag: "latest"
+  - name: rag-engine-ui
+    newName: "123456789012.dkr.ecr.us-east-1.amazonaws.com/rag-prod-ui"
+    newTag: "latest"
+
+patches:
+  - path: api-serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: rag-engine-api
+  - path: worker-serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: rag-engine-worker
+
+configMapGenerator:
+  - name: rag-engine-config
+    literals:
+      - STORAGE_PROVIDER=s3
+      - LLM_PROVIDER=anthropic
+      - EMBEDDING_PROVIDER=anthropic
+      - LOG_LEVEL=INFO
+      - API_URL=https://api.your-domain.com

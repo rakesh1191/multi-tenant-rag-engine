@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-engine-worker
+  namespace: rag-engine
+  labels:
+    app: rag-engine-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-engine-worker
+  template:
+    metadata:
+      labels:
+        app: rag-engine-worker
+    spec:
+      serviceAccountName: rag-engine-worker
+      terminationGracePeriodSeconds: 120
+
+      containers:
+        - name: worker
+          image: rag-engine-api:latest  # same image as API, different command
+          command:
+            - celery
+            - -A
+            - app.ingestion.tasks
+            - worker
+            - --loglevel=info
+            - --concurrency=2
+            - -Q
+            - ingestion
+
+          envFrom:
+            - secretRef:
+                name: rag-engine-secrets
+            - configMapRef:
+                name: rag-engine-config
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
+
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - app.ingestion.tasks
+                - inspect
+                - ping
+                - -d
+                - "celery@$HOSTNAME"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+
+      tolerations:
+        - key: "role"
+          operator: "Equal"
+          value: "worker"
+          effect: "NoSchedule"
+
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values: ["worker"]

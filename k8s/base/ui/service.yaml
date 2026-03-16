@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-engine-ui
+  namespace: rag-engine
+  labels:
+    app: rag-engine-ui
+spec:
+  selector:
+    app: rag-engine-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000

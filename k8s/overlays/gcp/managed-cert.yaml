@@ -1,0 +1,9 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: rag-engine-cert
+  namespace: rag-engine
+spec:
+  domains:
+    - your-domain.com
+    - api.your-domain.com

@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ingress.yaml
+  - managed-cert.yaml
+
+images:
+  - name: rag-engine-api
+    newName: "us-central1-docker.pkg.dev/your-project-id/rag-prod-api/api"
+    newTag: "latest"
+  - name: rag-engine-ui
+    newName: "us-central1-docker.pkg.dev/your-project-id/rag-prod-ui/ui"
+    newTag: "latest"
+
+patches:
+  - path: api-serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: rag-engine-api
+  - path: worker-serviceaccount-patch.yaml
+    target:
+      kind: ServiceAccount
+      name: rag-engine-worker
+
+configMapGenerator:
+  - name: rag-engine-config
+    literals:
+      - STORAGE_PROVIDER=gcs
+      - LLM_PROVIDER=anthropic
+      - EMBEDDING_PROVIDER=anthropic
+      - LOG_LEVEL=INFO
+      - API_URL=https://api.your-domain.com

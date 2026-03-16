@@ -1,0 +1,127 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "infra/gcp/**"
+      - "k8s/overlays/gcp/**"
+      - "**.md"
+
+env:
+  AWS_REGION: us-east-1
+  ECR_API_REPO: rag-prod-api
+  ECR_UI_REPO: rag-prod-ui
+  EKS_CLUSTER: rag-prod-cluster
+
+permissions:
+  id-token: write   # OIDC token for AWS
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build & Push to ECR
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.tag.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "sha=${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_API_REPO }}:${{ steps.tag.outputs.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_API_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v5
+        with:
+          context: ui
+          file: Dockerfile.ui
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_UI_REPO }}:${{ steps.tag.outputs.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_UI_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}
+
+      - name: Log in to ECR (for image tag resolution)
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run database migrations
+        run: |
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_API_REPO }}:${{ needs.build-and-push.outputs.image_tag }}"
+          kubectl -n rag-engine delete job db-migrate --ignore-not-found
+          kubectl -n rag-engine create job db-migrate \
+            --from=cronjob/db-migrate-template \
+            --dry-run=client -o yaml \
+            | sed "s|image:.*|image: $IMAGE|g" \
+            | kubectl apply -f -
+          kubectl -n rag-engine wait --for=condition=complete job/db-migrate --timeout=300s
+
+      - name: Deploy with Kustomize
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          ECR="${{ steps.login-ecr.outputs.registry }}"
+
+          cd k8s/overlays/aws
+          kustomize edit set image \
+            rag-engine-api="${ECR}/${{ env.ECR_API_REPO }}:${IMAGE_TAG}" \
+            rag-engine-ui="${ECR}/${{ env.ECR_UI_REPO }}:${IMAGE_TAG}"
+
+          kubectl apply -k .
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n rag-engine rollout status deployment/rag-engine-api --timeout=300s
+          kubectl -n rag-engine rollout status deployment/rag-engine-ui --timeout=300s
+          kubectl -n rag-engine rollout status deployment/rag-engine-worker --timeout=300s
+
+      - name: Smoke test
+        run: |
+          API_URL=$(kubectl -n rag-engine get ingress rag-engine -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          curl -sf "https://${API_URL}/health" | jq .

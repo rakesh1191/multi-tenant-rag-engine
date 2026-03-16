@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 1024
     LLM_TEMPERATURE: float = 0.1
 
+    # Storage provider — "s3" (AWS S3 / MinIO) or "gcs" (Google Cloud Storage)
+    STORAGE_PROVIDER: str = "s3"
+    GCS_PROJECT_ID: str = ""
+    GCS_BUCKET: str = ""  # falls back to S3_BUCKET when STORAGE_PROVIDER=s3
+
     # Ollama (local LLM + embeddings)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2"

@@ -84,7 +84,6 @@ async def health_ready():
     from sqlalchemy import text
     from app.common.database import get_engine
     from app.cache.redis import _get_redis
-    from app.common.storage import get_s3_client
 
     checks: dict = {}
     all_ok = True
@@ -108,11 +107,11 @@ async def health_ready():
         checks["redis"] = {"status": "error", "detail": str(exc)}
         all_ok = False
 
-    # --- S3 / MinIO ---
+    # --- Storage (S3 / GCS) ---
     try:
-        async with get_s3_client() as s3:
-            await s3.head_bucket(Bucket=settings.S3_BUCKET)
-        checks["storage"] = {"status": "ok"}
+        from app.common.storage import get_storage_adapter
+        await get_storage_adapter().health_check()
+        checks["storage"] = {"status": "ok", "provider": settings.STORAGE_PROVIDER}
     except Exception as exc:
         checks["storage"] = {"status": "error", "detail": str(exc)}
         all_ok = False

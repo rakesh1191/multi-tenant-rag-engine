@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-engine-ui
+  namespace: rag-engine
+  labels:
+    app: rag-engine-ui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-engine-ui
+  template:
+    metadata:
+      labels:
+        app: rag-engine-ui
+    spec:
+      terminationGracePeriodSeconds: 30
+
+      containers:
+        - name: ui
+          image: rag-engine-ui:latest  # overridden by cloud overlay
+          ports:
+            - containerPort: 3000
+              name: http
+
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rag-engine-config
+                  key: API_URL
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 30
