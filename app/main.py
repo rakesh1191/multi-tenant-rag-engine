@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.common.logging import setup_logging
 from app.common.middleware import RequestLoggingMiddleware
@@ -85,7 +84,7 @@ async def health_ready():
     from app.common.database import get_engine
     from app.cache.redis import _get_redis
 
-    checks: dict = {}
+    checks: dict[str, dict[str, str]] = {}
     all_ok = True
 
     # --- PostgreSQL ---

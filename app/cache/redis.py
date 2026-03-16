@@ -2,21 +2,20 @@
 Redis cache layer for query results and embeddings.
 
 Keys:
-  Query cache:    rag:query:{version}:{sha256(tenant_id:query)}   TTL: 1 hour
+  Query cache:     rag:query:{version}:{sha256(tenant_id:query)}   TTL: 1 hour
   Embedding cache: emb:{sha256(text)}                              TTL: 24 hours
-  Cache version:  rag:cv:{tenant_id}
+  Cache version:   rag:cv:{tenant_id}
 """
 from __future__ import annotations
 
 import hashlib
 import json
-from typing import Optional
 
 import redis.asyncio as aioredis
 
 from app.config import settings
 
-_redis: Optional[aioredis.Redis] = None
+_redis: aioredis.Redis | None = None
 
 CACHE_TTL_SECONDS = 3600       # 1 hour for query cache
 EMBEDDING_TTL_SECONDS = 86400  # 24 hours for embedding cache
@@ -67,14 +66,14 @@ async def _cache_key(tenant_id: str, query: str) -> str:
     return f"rag:query:{version}:{digest}"
 
 
-async def get_cached_response(tenant_id: str, query: str) -> Optional[dict]:
+async def get_cached_response(tenant_id: str, query: str) -> dict | None:
     """Return cached response dict or None."""
     try:
         r = _get_redis()
         key = await _cache_key(tenant_id, query)
         value = await r.get(key)
         if value:
-            return json.loads(value)
+            return json.loads(value)  # type: ignore[no-any-return]
     except Exception:
         pass  # cache miss on any error
     return None
@@ -99,13 +98,13 @@ def _embedding_key(text: str) -> str:
     return f"emb:{digest}"
 
 
-async def get_cached_embedding(text: str) -> Optional[list[float]]:
+async def get_cached_embedding(text: str) -> list[float] | None:
     """Return cached embedding or None. Key: emb:{sha256(text)}. TTL: 24h."""
     try:
         r = _get_redis()
         value = await r.get(_embedding_key(text))
         if value:
-            return json.loads(value)
+            return json.loads(value)  # type: ignore[no-any-return]
     except Exception:
         pass
     return None

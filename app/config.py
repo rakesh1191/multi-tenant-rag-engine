@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -71,6 +72,16 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        """Fail fast on startup if insecure defaults are used in production."""
+        if self.is_production and self.JWT_SECRET_KEY == "change-me-in-production":
+            raise ValueError(
+                "JWT_SECRET_KEY must be changed from the default in production. "
+                "Generate one with: openssl rand -hex 32"
+            )
+        return self
 
 
 @lru_cache

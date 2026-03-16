@@ -1,0 +1,20 @@
+# Dev overrides — applied automatically when you run `docker-compose up`.
+# Enables API hot-reload and Celery worker auto-restart on code changes.
+# For production-like testing, use: docker-compose -f docker-compose.yml up
+
+services:
+  app:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+    environment:
+      APP_ENV: development
+      APP_LOG_LEVEL: DEBUG
+
+  worker:
+    command: >
+      watchmedo auto-restart
+        --directory=/app/app
+        --pattern=*.py
+        --recursive
+        -- celery -A app.ingestion.tasks worker --loglevel=info --concurrency=2 --pool=solo
+    environment:
+      APP_ENV: development

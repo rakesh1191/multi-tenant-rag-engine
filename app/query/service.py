@@ -16,7 +16,6 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -267,7 +266,7 @@ async def query_stream(
 
     full_answer = "".join(collected)
     latency_ms = int((time.monotonic() - t0) * 1000)
-    token_usage: dict = {}  # streaming APIs don't always return usage inline
+    token_usage: dict[str, int] = {}  # streaming APIs don't always return usage inline
 
     log_id = await _log_query(
         db, tenant_id, user_id, query_text, full_answer, latency_ms, token_usage, cache_hit=False,
